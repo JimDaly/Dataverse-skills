@@ -102,22 +102,41 @@ def _get_credential():
         print("ERROR: azure-identity not installed. Run: pip install --upgrade azure-identity", flush=True)
         sys.exit(1)
 
-    # Warn if only one of CLIENT_ID / CLIENT_SECRET is set
-    if bool(client_id) != bool(client_secret):
-        print("WARNING: Only one of CLIENT_ID / CLIENT_SECRET is set. Both are required for", flush=True)
-        print("  service principal auth. Falling back to interactive device code flow.", flush=True)
-
-    # Path 1: Service principal (non-interactive)
+    # Path 1: Service principal with client secret (non-interactive)
     if client_id and client_secret:
         _credential = ClientSecretCredential(
             tenant_id=tenant_id,
             client_id=client_id,
             client_secret=client_secret,
         )
+    # Path 2: Certificate-based auth (non-interactive, CI/CD pipelines)
+    # Set CERT_PATH to a .pfx or .pem file to use this path.
+    elif client_id and not client_secret:
+        cert_path = os.environ.get("CERT_PATH", "")
+        if cert_path and os.path.exists(cert_path):
+            from azure.identity import CertificateCredential
+            _credential = CertificateCredential(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                certificate_path=cert_path,
+                send_certificate_chain=True,
+            )
+        else:
+            # CLIENT_ID set without secret or cert — fall through to device code
+            if cert_path:
+                print(f"WARNING: CERT_PATH is set but file not found: {cert_path}", flush=True)
+            else:
+                print("WARNING: CLIENT_ID is set but no CLIENT_SECRET or CERT_PATH found.", flush=True)
+            print("  Falling back to interactive device code flow.", flush=True)
+            _credential = None  # Will be set below
     else:
-        # Path 2: Device code flow (interactive) with persistent OS-level token cache.
-        # AuthenticationRecord tells the credential which cached account to silently
-        # refresh, avoiding a device code prompt on every new process.
+        _credential = None  # No CLIENT_ID at all
+
+    # Path 3: Device code flow (interactive) — fallback when no non-interactive cred was set
+    if _credential is None:
+        # Persistent OS-level token cache. AuthenticationRecord tells the credential
+        # which cached account to silently refresh, avoiding a device code prompt
+        # on every new process.
         from azure.identity import AuthenticationRecord
 
         auth_record = None
