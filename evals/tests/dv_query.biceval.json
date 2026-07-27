@@ -1,0 +1,83 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Query",
+  "description": "Live read-only querying for the dv-query skill against a real Dataverse org. Tests target out-of-box system tables that exist and are non-empty in EVERY org (systemuser always has >=1 enabled user; businessunit always has exactly one root unit), so live runs are deterministic without seeding data. Runs in both simulated (dry-run) and live modes; live-only assertions are stripped in simulated mode via simulated_overrides.",
+  "enabled_evaluators": [
+    {
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    },
+    {
+      "name": "DataverseEffectiveEffort.prompty",
+      "passing_score": 1,
+      "priority": 3
+    }
+  ],
+  "defaultAssertions": [
+    "PRIORITY_2: FIRST_ATTEMPT: Agent achieved the goal on its first approach without fumbling, error-recovery pivots, or retries that indicate the skill should have guided better"
+  ],
+  "tests": [
+    {
+      "test_id": "query_001_count_users",
+      "prompt": "How many enabled users are in my Dataverse environment? Query the systemuser table and give me the exact count.",
+      "expected_response": "A read count on the out-of-box systemuser table => dv-query routing: use the SQL (TDS) endpoint (SELECT COUNT(*) FROM systemuser WHERE isdisabled = 0) or an OData $count / aggregate, or MCP query for a single scalar. Report the exact integer count (always >=1 because the environment always has at least one enabled user). Raw urllib/requests is NOT acceptable.",
+      "category": "query",
+      "description": "Simple scalar count on an always-present out-of-box table (systemuser). Deterministic in any org (>=1 enabled user). Verified live by returning a concrete integer.",
+      "priority": 1,
+      "mode": "both",
+      "tags": {"Suite": "Regression", "Domain": "Query", "Skill": "dv-query", "Type": "count"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "SQL"},
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: Agent queries the systemuser table using a supported dv-query method — the SQL/TDS endpoint (e.g. SELECT COUNT(*) FROM systemuser), an OData $count/aggregate, or the MCP query tool. A hand-rolled urllib/requests call is NOT acceptable.",
+        "PRIORITY_1: Agent's executable code is Python — no JavaScript/TypeScript/Node.js or PowerShell.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_2: CONTAINS: systemuser",
+        "PRIORITY_2: SKILL_LOADED: dv-query",
+        "PRIORITY_1: Agent actually executed the query against the live org and reported a concrete integer count of enabled users (>=1).",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+      ],
+      "simulated_overrides": {
+        "remove_assertions": [
+          "PRIORITY_1: Agent actually executed the query against the live org and reported a concrete integer count of enabled users (>=1).",
+          "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+        ],
+        "add_assertions": [
+          "PRIORITY_2: Agent states the query it would run and how it would report the count even though it does not execute in dry-run mode."
+        ]
+      }
+    },
+    {
+      "test_id": "query_002_root_business_unit",
+      "prompt": "What is the name of the root business unit in my Dataverse environment? The root business unit is the one with no parent. Return just its name.",
+      "expected_response": "A filtered read on the out-of-box businessunit table => dv-query: SQL (SELECT name FROM businessunit WHERE parentbusinessunitid IS NULL) or OData ($filter=parentbusinessunitid eq null, $select=name), or MCP query. Every org has exactly one root business unit, so the result is a single deterministic name. Report just that name. Raw urllib/requests is NOT acceptable.",
+      "category": "query",
+      "description": "Filtered single-row read on an always-present out-of-box table (businessunit, exactly one root). Deterministic in any org. Verified live by returning the root BU name.",
+      "priority": 1,
+      "mode": "both",
+      "tags": {"Suite": "Regression", "Domain": "Query", "Skill": "dv-query", "Type": "filter"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "SQL", "trap": "not filtering for the null-parent root"},
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: Agent queries the businessunit table filtering for the root (parentbusinessunitid IS NULL / eq null) using a supported dv-query method (SQL/TDS, OData $filter, or MCP query) — not raw urllib/requests.",
+        "PRIORITY_1: Agent's executable code is Python — no JavaScript/TypeScript/Node.js or PowerShell.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_2: CONTAINS: businessunit",
+        "PRIORITY_2: CONTAINS_ANY: parentbusinessunitid, parent business unit, root",
+        "PRIORITY_2: SKILL_LOADED: dv-query",
+        "PRIORITY_1: Agent actually executed the query against the live org and returned the concrete name of the single root business unit.",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+      ],
+      "simulated_overrides": {
+        "remove_assertions": [
+          "PRIORITY_1: Agent actually executed the query against the live org and returned the concrete name of the single root business unit.",
+          "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+        ],
+        "add_assertions": [
+          "PRIORITY_2: Agent states the filtered query it would run (parentbusinessunitid is null) even though it does not execute in dry-run mode."
+        ]
+      }
+    }
+  ]
+}
