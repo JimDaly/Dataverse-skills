@@ -1,0 +1,160 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Regression",
+  "description": "Version-regression suite for the Dataverse plugin skills. Each test encodes a developer-experience gap that an end-to-end app-build / plugin-authoring exercise found in plugin v1.6.0 and that the v1.7.0 (PR #99) + v1.8.0 (PR #100) skill fixes closed. The SAME test file is run against two skill versions -- v1.6.0 (pre-improvement baseline, commit 2e651c72) and v1.9.0 (current main) -- to show the evals deterministically catch the regression: v1.6.0 should FAIL these and v1.9.0 should PASS. The signal is driven by the SKILL TEXT: v1.6.0 teaches a 'Python Only -- No Exceptions' rule, a fixed MCP->SDK->WebAPI order, and hand-rolled urllib recipes for the escape hatch; v1.9.0 de-steers to capability-based routing (MCP / Dataverse CLI / SDK as peers) and routes unbound actions and forms/views through the managed `dataverse api request` surface and ordinary SDK records. Determinism uses HARD assertions on the captured trajectory (NOT_CONTAINS / CONTAINS_ANY / ERROR_EXIT_COUNT) as the primary pass/fail, with LLM-judged outcome assertions for context. Every test is natural customer language (states the JOB, not the tool), self-contained, and targets out-of-box tables so runs are deterministic. Connect/auth findings and the unshipped PR-3 jobs (model-driven app composition, first-time plugin registration) are intentionally excluded -- they are not deterministically observable here or not fixed in v1.9.0.",
+  "enabled_evaluators": [
+    {
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    }
+  ],
+  "defaultAssertions": [
+    "PRIORITY_2: FIRST_ATTEMPT: Agent achieved the goal on its first approach without fumbling, error-recovery pivots, or trial-and-error retries that indicate the skill should have guided better"
+  ],
+  "tests": [
+    {
+      "test_id": "regr_001_publish_via_managed_escape_hatch",
+      "prompt": "I just added a new column to the account table in my Dataverse maker portal, but it isn't showing up yet when I query the API. Can you publish all the customizations in my org so the change goes live?",
+      "expected_response": "Publishing customizations (PublishAllXml / PublishXml) is an UNBOUND action with no SDK CRUD method -- it is the classic escape-hatch case. The v1.9.0 skills route unbound actions through the managed Dataverse CLI escape hatch: `dataverse api request` calling PublishAllXml (or the equivalent managed surface). The v1.6.0 gap: the skills teach a hand-rolled `urllib`/`requests` POST to /api/data/v9.x/PublishAllXml, re-implementing auth and error handling. The right answer uses the managed surface; a hand-rolled raw HTTP call is the antipattern this test catches. Outcome is judged from the publish call result, not the agent's narration.",
+      "category": "solution",
+      "description": "Escape-hatch routing for an unbound action (PublishAllXml). v1.9.0 uses `dataverse api request`; v1.6.0 hand-rolls urllib. Read-only-safe / idempotent (publishing customizations). No prerequisites.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Solution",
+        "Skill": "dv-solution",
+        "Type": "escape-hatch",
+        "Finding": "raw-urllib-escape-hatch"
+      },
+      "custom_metadata": {
+        "skill": "dv-solution",
+        "tool_routing": "managed escape hatch: dataverse api request -> PublishAllXml (unbound action; no SDK method)",
+        "trap": "hand-rolled urllib/requests POST to the Web API for the unbound action (the v1.6.0 pattern)"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-solution/**",
+        "**/skills/dv-overview/**"
+      ],
+      "assertions": [
+        "PRIORITY_1: OUTCOME (customer's job done): the agent actually published customizations against the live org. Judge from the captured tool-call RESULT of the publish request (a success/200 or a completed PublishAllXml call), NOT from the agent's own summary sentence.",
+        "PRIORITY_1: The unbound publish action went through a MANAGED surface -- `dataverse api request` (the Dataverse CLI escape hatch) or an equivalent managed call -- NOT a hand-rolled urllib/requests HTTP POST that re-implements auth and error handling.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_1: NOT_CONTAINS: urllib.request",
+        "PRIORITY_1: NOT_CONTAINS: import urllib",
+        "PRIORITY_1: CONTAINS_ANY: dataverse api request, api request, PublishAllXml, PublishXml",
+        "PRIORITY_2: Any automation logic the agent writes is Python or a managed CLI/MCP call -- not JavaScript/TypeScript/Node.js or PowerShell.",
+        "PRIORITY_2: SKILL_LOADED: dv-solution",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 2"
+      ]
+    },
+    {
+      "test_id": "regr_002_read_uses_ga_sdk_shape",
+      "prompt": "Before I add it, can you check whether my Dataverse org already has an account named 'EvalRegr Globex Corporation'? Just tell me whether it exists.",
+      "expected_response": "A simple existence check. The v1.9.0 skills use the GA SDK read contract -- client.records.list(...) / list_pages(...) returning a flat QueryResult, or client.records.retrieve, or a managed read (dataverse data query / MCP) with a name filter. The v1.6.0 gap: the skills teach the DEPRECATED client.records.get() with manual page iteration, which mis-iterates the GA SDK's flat QueryResult (and get() is deprecated/removed on the installed GA SDK, so it errors or thrashes). The right answer never calls the deprecated get() page-iteration pattern. Judge the existence answer from the captured query RESULT.",
+      "category": "query",
+      "description": "SDK read-shape regression. v1.9.0 uses the GA list/retrieve/QueryResult contract or a managed read; v1.6.0 teaches deprecated records.get() + manual paging. Read-only, safe. No prerequisites.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Query",
+        "Skill": "dv-query",
+        "Type": "read",
+        "Finding": "sdk-read-shape"
+      },
+      "custom_metadata": {
+        "skill": "dv-query",
+        "tool_routing": "GA SDK read (client.records.list / list_pages / retrieve) or a managed read (dataverse data query / MCP) with a filter",
+        "trap": "deprecated client.records.get() with manual page iteration (the v1.6.0 pattern) -- errors or mis-iterates on the GA SDK"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-query/**",
+        "**/skills/dv-data/**",
+        "**/skills/dv-overview/**"
+      ],
+      "assertions": [
+        "PRIORITY_1: OUTCOME (customer's job done): the agent answered whether the account exists, grounded in the captured read RESULT (a query that returned matching rows or none), NOT an unsupported guess.",
+        "PRIORITY_1: The read used the GA SDK contract (client.records.list / list_pages / retrieve, iterating a flat QueryResult) OR a managed read (dataverse data query / MCP) -- NOT the deprecated client.records.get() with manual page iteration.",
+        "PRIORITY_1: NOT_CONTAINS: records.get(",
+        "PRIORITY_1: NOT_CONTAINS: .get(entity",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_1: CONTAINS_ANY: client.records.list, list_pages, retrieve, dataverse data query, retrieve_multiple, list_columns",
+        "PRIORITY_2: SKILL_LOADED: dv-query",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+      ]
+    },
+    {
+      "test_id": "regr_003_view_as_ordinary_record",
+      "prompt": "Create a public view on the account table called 'EvalRegr Priority Accounts' that shows the account name and the main phone column.",
+      "expected_response": "Creating a view = creating a `savedquery` record (with fetchxml + layoutxml), then publishing. The v1.9.0 skills treat forms/views as ORDINARY records: create the savedquery via a managed surface (SDK client.records.create / MCP / Dataverse CLI), then publish via the managed `dataverse api request` escape hatch. The v1.6.0 gap: the skills hand-author raw savedquery/FormXml and push it with hand-rolled urllib. The right answer uses a managed record write; hand-rolled urllib XML push is the antipattern. Judge from the create RESULT (a returned savedquery ID).",
+      "category": "metadata",
+      "description": "Forms/views regression. v1.9.0 creates the view as an ordinary savedquery record via a managed surface + managed publish; v1.6.0 hand-rolls FormXml over urllib. Creates one savedquery with a unique name. No prerequisites.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Metadata",
+        "Skill": "dv-metadata",
+        "Type": "forms-views",
+        "Finding": "forms-views-handrolled-xml"
+      },
+      "custom_metadata": {
+        "skill": "dv-metadata",
+        "tool_routing": "savedquery as an ordinary record via SDK/CLI/MCP, then publish via dataverse api request",
+        "trap": "hand-authored FormXml/savedquery XML pushed via raw urllib/requests (the v1.6.0 pattern)"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-metadata/**",
+        "**/skills/dv-solution/**",
+        "**/skills/dv-overview/**"
+      ],
+      "assertions": [
+        "PRIORITY_1: OUTCOME (customer's job done): a public view (savedquery) named 'EvalRegr Priority Accounts' on the account table was actually created. Judge from the captured create tool-call RESULT (a returned savedquery record ID), NOT the agent's own claim.",
+        "PRIORITY_1: The view was created as an ordinary `savedquery` record through a MANAGED surface (SDK client.records.create / MCP create_record / dataverse data create) and published via a managed surface -- NOT hand-authored XML pushed through raw urllib/requests.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_1: NOT_CONTAINS: urllib.request",
+        "PRIORITY_1: CONTAINS_ANY: savedquery",
+        "PRIORITY_1: CONTAINS_ANY: client.records.create, create_record, dataverse data create, dataverse api request",
+        "PRIORITY_2: SKILL_LOADED: dv-metadata",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 2"
+      ]
+    },
+    {
+      "test_id": "regr_004_capability_based_routing",
+      "prompt": "What columns does the account table have in my Dataverse org? Give me the main ones a salesperson would care about.",
+      "expected_response": "A schema-introspection read. The v1.9.0 skills use capability-based routing: a managed introspection surface is fine -- SDK client.metadata / list_columns, the Dataverse CLI (dataverse data query on metadata / EntityDefinitions), or the MCP describe/list tools are all valid PEERS. The v1.6.0 gap: an over-prescriptive 'Python Only -- No Exceptions' rule (which bans the Dataverse CLI even though pac is used elsewhere) plus a 'don't introspect / don't improvise' rule, forcing the agent off the clean managed introspection path. The right answer introspects via a managed surface and does not hand-roll a raw urllib metadata call.",
+      "category": "metadata",
+      "description": "Capability-based-routing (de-steer) regression. v1.9.0 introspects via a managed peer surface (SDK/CLI/MCP); v1.6.0's Python-Only + don't-introspect rules steer away. Read-only, safe. No prerequisites.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Metadata",
+        "Skill": "dv-overview",
+        "Type": "routing",
+        "Finding": "over-prescriptive-routing"
+      },
+      "custom_metadata": {
+        "skill": "dv-overview",
+        "tool_routing": "capability-based: SDK list_columns / metadata OR Dataverse CLI OR MCP describe -- as peers",
+        "trap": "Python-Only ban on the CLI + don't-introspect rule forcing a suboptimal or hand-rolled path (the v1.6.0 pattern)"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-overview/**",
+        "**/skills/dv-metadata/**",
+        "**/skills/dv-query/**"
+      ],
+      "assertions": [
+        "PRIORITY_1: OUTCOME (customer's job done): the agent listed the account table's columns, grounded in an actual metadata read RESULT.",
+        "PRIORITY_1: The column introspection used a MANAGED surface (SDK client.metadata / list_columns, the Dataverse CLI, or MCP describe/list) -- NOT a hand-rolled urllib/requests metadata call, and the agent did not refuse to introspect.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_1: NOT_CONTAINS: urllib.request",
+        "PRIORITY_1: CONTAINS_ANY: list_columns, dataverse data query, EntityDefinitions, describe, list_tables, client.metadata, attributes",
+        "PRIORITY_2: SKILL_LOADED: dv-overview",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+      ]
+    }
+  ]
+}
