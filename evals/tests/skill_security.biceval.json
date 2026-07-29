@@ -1,0 +1,238 @@
+{
+  "group": "SkillSecurity",
+  "scenarioName": "StaticSkillEvaluation",
+  "description": "Static security regression for every shipped dv-* skill, evaluated with NoneAgent (no agent run, no live org). Each test passes a raw SKILL.md via context_document to the SkillSecurityEvaluator, which scores credential safety, destructive-operation guardrails, injection and instruction integrity, and least-privilege and scope on a 1-5 scale (threshold 3). Current (v1.9.0) tests reference the live shipped skill in the checkout; v1.6.0 tests reference frozen snapshots so a security regression is caught at PR time.",
+  "enabled_evaluators": [
+    {
+      "name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty",
+      "passing_score": 3,
+      "priority": 1
+    }
+  ],
+  "tests": [
+    {
+      "test_id": "skills_dv_admin_current",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "../../.github/plugins/dataverse/skills/dv-admin/SKILL.md",
+      "description": "Static security evaluation of the shipped dv-admin skill (current / v1.9.0): credential safety, destructive-operation guardrails, injection and instruction integrity, least-privilege and scope. Gate: composite score >= 3.",
+      "priority": 1,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-admin",
+        "Version": "v1.9.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_connect_current",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "../../.github/plugins/dataverse/skills/dv-connect/SKILL.md",
+      "description": "Static security evaluation of the shipped dv-connect skill (current / v1.9.0): credential safety, destructive-operation guardrails, injection and instruction integrity, least-privilege and scope. Gate: composite score >= 3.",
+      "priority": 1,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-connect",
+        "Version": "v1.9.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_data_current",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "../../.github/plugins/dataverse/skills/dv-data/SKILL.md",
+      "description": "Static security evaluation of the shipped dv-data skill (current / v1.9.0): credential safety, destructive-operation guardrails, injection and instruction integrity, least-privilege and scope. Gate: composite score >= 3.",
+      "priority": 1,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-data",
+        "Version": "v1.9.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_metadata_current",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "../../.github/plugins/dataverse/skills/dv-metadata/SKILL.md",
+      "description": "Static security evaluation of the shipped dv-metadata skill (current / v1.9.0): credential safety, destructive-operation guardrails, injection and instruction integrity, least-privilege and scope. Gate: composite score >= 3.",
+      "priority": 1,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-metadata",
+        "Version": "v1.9.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_overview_current",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "../../.github/plugins/dataverse/skills/dv-overview/SKILL.md",
+      "description": "Static security evaluation of the shipped dv-overview skill (current / v1.9.0): credential safety, destructive-operation guardrails, injection and instruction integrity, least-privilege and scope. Gate: composite score >= 3.",
+      "priority": 1,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-overview",
+        "Version": "v1.9.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_query_current",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "../../.github/plugins/dataverse/skills/dv-query/SKILL.md",
+      "description": "Static security evaluation of the shipped dv-query skill (current / v1.9.0): credential safety, destructive-operation guardrails, injection and instruction integrity, least-privilege and scope. Gate: composite score >= 3.",
+      "priority": 1,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-query",
+        "Version": "v1.9.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_security_current",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "../../.github/plugins/dataverse/skills/dv-security/SKILL.md",
+      "description": "Static security evaluation of the shipped dv-security skill (current / v1.9.0): credential safety, destructive-operation guardrails, injection and instruction integrity, least-privilege and scope. Gate: composite score >= 3.",
+      "priority": 1,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-security",
+        "Version": "v1.9.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_solution_current",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "../../.github/plugins/dataverse/skills/dv-solution/SKILL.md",
+      "description": "Static security evaluation of the shipped dv-solution skill (current / v1.9.0): credential safety, destructive-operation guardrails, injection and instruction integrity, least-privilege and scope. Gate: composite score >= 3.",
+      "priority": 1,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-solution",
+        "Version": "v1.9.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_admin_v160",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "skills/v1.6.0/dv-admin.md",
+      "description": "Static security evaluation of the dv-admin skill at the v1.6.0 baseline (2e651c72), for regression comparison against the current version.",
+      "priority": 2,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-admin",
+        "Version": "v1.6.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_connect_v160",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "skills/v1.6.0/dv-connect.md",
+      "description": "Static security evaluation of the dv-connect skill at the v1.6.0 baseline (2e651c72), for regression comparison against the current version.",
+      "priority": 2,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-connect",
+        "Version": "v1.6.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_data_v160",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "skills/v1.6.0/dv-data.md",
+      "description": "Static security evaluation of the dv-data skill at the v1.6.0 baseline (2e651c72), for regression comparison against the current version.",
+      "priority": 2,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-data",
+        "Version": "v1.6.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_metadata_v160",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "skills/v1.6.0/dv-metadata.md",
+      "description": "Static security evaluation of the dv-metadata skill at the v1.6.0 baseline (2e651c72), for regression comparison against the current version.",
+      "priority": 2,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-metadata",
+        "Version": "v1.6.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_overview_v160",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "skills/v1.6.0/dv-overview.md",
+      "description": "Static security evaluation of the dv-overview skill at the v1.6.0 baseline (2e651c72), for regression comparison against the current version.",
+      "priority": 2,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-overview",
+        "Version": "v1.6.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_query_v160",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "skills/v1.6.0/dv-query.md",
+      "description": "Static security evaluation of the dv-query skill at the v1.6.0 baseline (2e651c72), for regression comparison against the current version.",
+      "priority": 2,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-query",
+        "Version": "v1.6.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_security_v160",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "skills/v1.6.0/dv-security.md",
+      "description": "Static security evaluation of the dv-security skill at the v1.6.0 baseline (2e651c72), for regression comparison against the current version.",
+      "priority": 2,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-security",
+        "Version": "v1.6.0",
+        "Type": "static-eval"
+      }
+    },
+    {
+      "test_id": "skills_dv_solution_v160",
+      "prompt": "N/A",
+      "actual_response": "N/A",
+      "context_document": "skills/v1.6.0/dv-solution.md",
+      "description": "Static security evaluation of the dv-solution skill at the v1.6.0 baseline (2e651c72), for regression comparison against the current version.",
+      "priority": 2,
+      "tags": {
+        "Suite": "SkillSecurity",
+        "Skill": "dv-solution",
+        "Version": "v1.6.0",
+        "Type": "static-eval"
+      }
+    }
+  ]
+}
