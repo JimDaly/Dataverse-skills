@@ -7,20 +7,32 @@ Recycle bin settings live in the `recyclebinconfigs` entity, NOT in `orgdborgset
 ### Read Recycle Bin Status
 
 ```python
-import os, sys
+import os, sys, json, urllib.request, urllib.parse
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_client
+from auth import get_token, get_plugin_headers, load_env  # SDK does not support recyclebinconfigs entity
 
-client = get_client("dv-admin")
+load_env()
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+token = get_token()
 
 ORGANIZATION_ENTITY_ID = "e1bd1119-6e9d-45a4-bc15-12051e65a0bd"
 
-# recyclebinconfig is an ordinary entity — SDK record read (filter by extensionofrecordid).
-records = list(client.records.list(
-    "recyclebinconfig",
-    select=["recyclebinconfigid", "statecode", "statuscode", "cleanupintervalindays"],
-    filter=f"_extensionofrecordid_value eq {ORGANIZATION_ENTITY_ID}",
-))
+headers = get_plugin_headers("dv-admin", token)
+headers.update({
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "OData-MaxVersion": "4.0",
+    "OData-Version": "4.0",
+})
+
+# Fetch org-level config by extensionofrecordid (NOT by name)
+filter_q = urllib.parse.quote(f"_extensionofrecordid_value eq '{ORGANIZATION_ENTITY_ID}'")
+req = urllib.request.Request(
+    f"{env_url}/api/data/v9.2/recyclebinconfigs?$filter={filter_q}&$select=recyclebinconfigid,statecode,statuscode,cleanupintervalindays",
+    headers=headers,
+)
+with urllib.request.urlopen(req) as resp:
+    records = json.loads(resp.read()).get("value", [])
 
 if records:
     config = records[0]
@@ -54,49 +66,67 @@ Every enable/disable queues a `ProcessRecycleBin` async operation (OperationType
 Two cases depending on whether a config record already exists. Both send `isreadyforrecyclebin: true`.
 
 ```python
-# ... (same imports, client, ORGANIZATION_ENTITY_ID, and fetch as above; recyclebinconfig is an entity)
+# ... (same imports, headers, ORGANIZATION_ENTITY_ID, and fetch as above)
+# SDK does not support recyclebinconfigs entity
+
 CLEANUP_DAYS = 30  # default; -1 means records in recycle bin are never auto-purged
 
 # Pre-flight: wait for any in-flight ProcessRecycleBin async jobs to finish
 import time
-def wait_for_recyclebin_async_jobs(client, timeout_s=120):
-    # OperationType 50 = ProcessRecycleBin; statecode 3 = Completed (done).
+def wait_for_recyclebin_async_jobs(env_url, headers, timeout_s=120):
+    # OperationType 50 = ProcessRecycleBin; StateCode 0=Ready/1=Suspended/2=Locked are all "not done"
+    filter_q = urllib.parse.quote("operationtype eq 50 and statecode ne 3")
+    url = f"{env_url}/api/data/v9.2/asyncoperations?$filter={filter_q}&$select=asyncoperationid,statecode,statuscode,name"
     deadline = time.time() + timeout_s
     while time.time() < deadline:
-        pending = list(client.records.list(
-            "asyncoperation",
-            select=["asyncoperationid", "statecode", "statuscode", "name"],
-            filter="operationtype eq 50 and statecode ne 3",
-        ))
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as resp:
+            pending = json.loads(resp.read()).get("value", [])
         if not pending:
             return
         print(f"  waiting on {len(pending)} ProcessRecycleBin job(s)...", flush=True)
         time.sleep(5)
     raise RuntimeError("Timed out waiting for pending ProcessRecycleBin async jobs")
 
-wait_for_recyclebin_async_jobs(client)
+wait_for_recyclebin_async_jobs(env_url, headers)
 
 if not records:
-    # Case 1: No config exists -- CREATE a new one.
-    # extensionofrecordid binds to the entities() metadata endpoint, NOT organizations().
-    client.records.create("recyclebinconfig", {
+    # Case 1: No config exists -- CREATE a new one
+    # extensionofrecordid binds to the entities() metadata endpoint, NOT organizations()
+    payload = {
         "extensionofrecordid@odata.bind": f"entities({ORGANIZATION_ENTITY_ID})",
+        "extensionofrecordid@OData.Community.Display.V1.FormattedValue": "OrganizationId",
         "isreadyforrecyclebin": True,   # MUST be true -- forces sync opt-in under the global lock
         "cleanupintervalindays": CLEANUP_DAYS,
-    })
+    }
+    req = urllib.request.Request(
+        f"{env_url}/api/data/v9.2/recyclebinconfigs",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        print(f"SUCCESS: recycle bin enabled with {CLEANUP_DAYS} day cleanup (HTTP {resp.status})", flush=True)
 else:
-    # Case 2: Config exists -- update statecode/statuscode, cleanup interval, isreadyforrecyclebin.
+    # Case 2: Config exists -- PATCH statecode/statuscode, cleanup interval, and isreadyforrecyclebin
     config_id = records[0]["recyclebinconfigid"]
-    client.records.update("recyclebinconfig", config_id, {
+    payload = {
         "cleanupintervalindays": CLEANUP_DAYS,
         "statecode": 0,
         "statuscode": 1,
         "isreadyforrecyclebin": True,   # MUST be true -- without this, UpdateInternal routes through updateAsync
-    })
-print(f"SUCCESS: recycle bin enabled with {CLEANUP_DAYS} day cleanup", flush=True)
+    }
+    req = urllib.request.Request(
+        f"{env_url}/api/data/v9.2/recyclebinconfigs({config_id})",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="PATCH",
+    )
+    with urllib.request.urlopen(req) as resp:
+        print(f"SUCCESS: recycle bin enabled with {CLEANUP_DAYS} day cleanup (HTTP {resp.status})", flush=True)
 
 # Post-flight: drain the sync opt-in fan-out before returning control
-wait_for_recyclebin_async_jobs(client)
+wait_for_recyclebin_async_jobs(env_url, headers)
 ```
 
 ### Disable Recycle Bin
@@ -104,22 +134,30 @@ wait_for_recyclebin_async_jobs(client)
 **Disable = PATCH `statecode=1, statuscode=2, isreadyforrecyclebin=false`.** This triggers the synchronous `OptOutOrganization` path which cascades cleanly to every entity config.
 
 ```python
-# ... (same imports/client and the records fetch from the Read block above,
-# AND the wait_for_recyclebin_async_jobs helper defined in the Enable block above)
-wait_for_recyclebin_async_jobs(client)   # drain first
+# ... (same fetch as above to get config_id)
+# SDK does not support recyclebinconfigs entity
+
+wait_for_recyclebin_async_jobs(env_url, headers)   # drain first
 
 if records:
     config_id = records[0]["recyclebinconfigid"]
-    client.records.update("recyclebinconfig", config_id, {
+    payload = {
         "statecode": 1,                 # Inactive
         "statuscode": 2,                # Inactive
         "isreadyforrecyclebin": False,  # required to take the isOptOut branch in UpdateInternal
-    })
-    print("SUCCESS: recycle bin disabled", flush=True)
+    }
+    req = urllib.request.Request(
+        f"{env_url}/api/data/v9.2/recyclebinconfigs({config_id})",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="PATCH",
+    )
+    with urllib.request.urlopen(req) as resp:
+        print(f"SUCCESS: recycle bin disabled (HTTP {resp.status})", flush=True)
 else:
     print("Recycle bin is already disabled (no config record)", flush=True)
 
-wait_for_recyclebin_async_jobs(client)   # drain the opt-out fan-out
+wait_for_recyclebin_async_jobs(env_url, headers)   # drain the opt-out fan-out
 ```
 
 **Do NOT use DELETE to disable.** Legacy guidance (including older Admin Center behavior) suggested DELETE, but DELETE enqueues an async opt-out and can leave per-entity configs orphaned — any platform metadata operation that runs before cleanup finishes will throw `EntityBinUpdateAction called for entity <x> which is not enabled for RecycleBin` on an unrelated entity.
