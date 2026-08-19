@@ -327,7 +327,9 @@ class InteractiveTierSelection(_AuthTestBase):
         self.assertIsInstance(cred, _FakeInteractiveBrowser)
         self.assertEqual(kind, "interactive-browser")
 
-    def test_headless_uses_device_code(self):
+    def test_device_code_when_no_workspace_cache(self):
+        # When no workspace cache can be built (opt-out, or path build failure),
+        # a headless host falls back to the legacy device-code credential.
         with tempfile.TemporaryDirectory() as tmp:
             record_path = Path(tmp) / "record.json"
             with mock.patch.object(auth, "_is_ci", lambda: False):
@@ -550,6 +552,77 @@ class WorkspaceTokenCachePath(_AuthTestBase):
                         os.chdir(cwd)
         self.assertIsNotNone(results[0])
         self.assertEqual(results[0], results[1])
+
+
+class WorkspaceCacheAutoDefault(_AuthTestBase):
+    """#117: on a headless, non-CI host with no explicit DATAVERSE_TOKEN_CACHE_DIR,
+    the cache auto-defaults into <workspace>/.dataverse so device code is once per
+    conversation. Desktop / CI keep the OS default cache; an opt-out value disables it.
+    """
+
+    def _resolve(self, env, browser, ci=False):
+        with tempfile.TemporaryDirectory() as anchor:
+            (Path(anchor) / "scripts").mkdir(parents=True)
+            fake_auth = str(Path(anchor) / "scripts" / "auth.py")
+            with mock.patch.object(auth, "__file__", fake_auth), \
+                    mock.patch.object(auth, "_host_has_browser", lambda: browser), \
+                    mock.patch.object(auth, "_is_ci", lambda: ci), \
+                    mock.patch.dict(os.environ, env, clear=True):
+                return auth._workspace_token_cache_path()
+
+    def test_headless_no_env_defaults_to_workspace(self):
+        path = self._resolve({}, browser=False)
+        self.assertIsNotNone(path)
+        self.assertEqual(path.parent.name, ".dataverse")
+        self.assertEqual(path.name, "tokencache_msalv3.dat")
+
+    def test_desktop_no_env_keeps_os_cache(self):
+        self.assertIsNone(self._resolve({}, browser=True))
+
+    def test_ci_no_env_keeps_os_cache(self):
+        self.assertIsNone(self._resolve({}, browser=False, ci=True))
+
+    def test_opt_out_keeps_os_cache_even_headless(self):
+        for val in ("off", "false", "0", "no", "none", "OFF"):
+            self.assertIsNone(
+                self._resolve({"DATAVERSE_TOKEN_CACHE_DIR": val}, browser=False),
+                msg=f"{val!r} should opt out of the workspace cache",
+            )
+
+    def test_explicit_env_used_even_on_headless(self):
+        path = self._resolve({"DATAVERSE_TOKEN_CACHE_DIR": "mycache"}, browser=False)
+        self.assertIsNotNone(path)
+        self.assertEqual(path.parent.name, "mycache")
+
+
+class WorkspaceCacheDecision(_AuthTestBase):
+    """The pure _should_use_workspace_cache() predicate is the single source of truth
+    for both _workspace_token_cache_path (path building) and _run_diagnose (tier
+    reporting), so the two cannot drift.
+    """
+
+    def _decide(self, env, browser, ci=False):
+        with mock.patch.object(auth, "_host_has_browser", lambda: browser), \
+                mock.patch.object(auth, "_is_ci", lambda: ci), \
+                mock.patch.dict(os.environ, env, clear=True):
+            return auth._should_use_workspace_cache()
+
+    def test_explicit_env_regardless_of_host(self):
+        self.assertEqual(self._decide({"DATAVERSE_TOKEN_CACHE_DIR": ".dv"}, browser=True), "explicit")
+        self.assertEqual(self._decide({"DATAVERSE_TOKEN_CACHE_DIR": ".dv"}, browser=False), "explicit")
+
+    def test_headless_no_env_defaults(self):
+        self.assertEqual(self._decide({}, browser=False), "default")
+
+    def test_desktop_no_env_is_none(self):
+        self.assertIsNone(self._decide({}, browser=True))
+
+    def test_ci_no_env_is_none(self):
+        self.assertIsNone(self._decide({}, browser=False, ci=True))
+
+    def test_opt_out_is_none_even_headless(self):
+        for val in ("off", "false", "0", "no", "none", "OFF"):
+            self.assertIsNone(self._decide({"DATAVERSE_TOKEN_CACHE_DIR": val}, browser=False), msg=val)
 
 
 if __name__ == "__main__":
