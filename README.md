@@ -2,6 +2,15 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+Dataverse Skills is the open-source home of the Microsoft Dataverse plugin for AI coding agents. The plugin lets you describe a Dataverse development or administration outcome in natural language, then gives the agent task-specific guidance for selecting and using the appropriate tools. This reduces the tool-specific syntax you need to include in prompts while preserving confirmation steps and guardrails for changes to environments, solutions, data, and security.
+
+## Project design
+
+The plugin starts with an overview skill that provides shared Dataverse context and routes each request to one or more specialized skills. Those skills guide the agent to the tool that best fits the operation and data volume, including the Dataverse MCP server, Dataverse CLI, Dataverse SDK for Python, Power Platform CLI, and Dataverse Web API.
+
+The project grows through new skills, improvements to existing guidance, bug reports, and documentation updates. See [CONTRIBUTING.md](CONTRIBUTING.md) for the different ways to contribute and instructions for testing changes locally.
+
+
 ## Learn more
 
 Learn more about the Dataverse plugin for AI coding agents:
